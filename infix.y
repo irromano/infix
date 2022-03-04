@@ -88,6 +88,14 @@ statement : TEXT '=' exp
 	#ifdef DEBUG
 	printf("variable %s is %d\n", $1, node->val);
 	#endif
+}
+| TEXT '=' statement
+{
+	struct nodeVar *node = assignVar($1, $3);
+	$$ = $3;
+	#ifdef DEBUG
+	printf("variable %s is = variable %d\n", $1, $3);
+	#endif
 };
 
 
@@ -118,8 +126,7 @@ exp : exp '+' factor
 		#ifdef DEBUG
 		printf("exp %d : statement %d + factor %d\n", $$, $1, $3);
 		#endif
-	}
-	;
+	};
 
 factor : factor '*' term
 	{ 
