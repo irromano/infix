@@ -23,7 +23,7 @@ struct nodeVar *head;
 %code requires {
 	struct nodeVar
 	{
-		char varName[20];
+		char varName[100];
 		int val;
 		struct nodeVar *next;
 	} nodeVar;
@@ -45,150 +45,133 @@ struct nodeVar *head;
 %left '*' '/'
 %right POW
 %right '!'
-%type <d> exp factor term
+%type <d> exp factor term statement
 %right '\n'
 %start infix
 
 %%
-infix : exp QUIT
+infix : exp '\n'
 	{ 
-		printf("=%d\nQuiting ...\n", $1);
-		return $1;
+		printf("=%d\n", $1);
 	}
-	| QUIT
+	| statement '\n'
 	{
-		printf("Quiting ...\n");
-		return 0;
+		printf("=%d\n", $1);
 	}
+	| infix exp '\n'
+	{ 
+		printf("=%d\n", $2);
+	}
+	| infix statement '\n'
+	{
+		printf("=%d\n", $2);
+	}
+	| infix '\n'
+	{
+		#ifdef DEBUG
+		printf("Blank '\\n' found\n");
+		#endif
+	};
+	
+statement : TEXT '=' exp
+{
+	struct nodeVar *node = assignVar($1, $3);
+	$$ = $3;
+	#ifdef DEBUG
+	printf("variable %s is = %d\n", $1, $3);
+	#endif
+}
+| TEXT
+{
+	struct nodeVar *node = findVar($1, 0, head);
+	$$ = node->val;
+	#ifdef DEBUG
+	printf("variable %s is %d\n", $1, node->val);
+	#endif
+};
+
 
 exp : exp '+' factor
 	{ 
 		$$ = $1 + $3;
 		#ifdef DEBUG
-		printf("exp %d <- exp %d + factor %d\n", $$, $1, $3);
+		printf("exp %d : exp %d + factor %d\n", $$, $1, $3);
 		#endif
 	}
 	| exp '-' factor
 	{ 
 		$$ = $1 - $3;
 		#ifdef DEBUG
-		printf("exp %d <- exp %d - factor %d\n", $$, $1, $3);
+		printf("exp %d : exp %d - factor %d\n", $$, $1, $3);
 		#endif
 	}
     | factor
 	{ 
 		$$ = $1;
 		#ifdef DEBUG
-		printf("exp %d <- factor %d\n", $$, $1);
+		printf("exp %d : factor %d\n", $$, $1);
 		#endif
 	}
-	| exp '\n'
-	{ 
-		$$ = $1;
-		#ifdef DEBUG
-		printf("exp %d <- exp %d \\n\n", $$, $1);
-		#endif
-		printf("=%d\n", $1);
-	}
-	| '!' term
+	| statement '+' factor
 	{
-		$$ = ($2 == 0) ? 1 : 0;
+		$$ = $1 + $3;
 		#ifdef DEBUG
-		printf("exp %d <- ! %d\n", $$, $2);
+		printf("exp %d : statement %d + factor %d\n", $$, $1, $3);
 		#endif
 	}
-	| exp '!' term
-	{
-		$$ = ($3 == 0) ? 1 : 0;
-		#ifdef DEBUG
-		printf("exp %d <- exp ! %d\n", $$, $3);
-		#endif
-	}
-	| TEXT
-	{
-
-	}
-	| TEXT '=' exp
-	{
-		$$ = assignVar($1, $3)->val;
-		#ifdef DEBUG
-		printf("exp %d <- text %s = exp %d\n", $$, $1, $3);
-		#endif
-	}
-	| exp TEXT '=' exp
-	{
-		$$ = assignVar($2, $4)->val;
-		#ifdef DEBUG
-		printf("exp %d <- exp text %s = exp %d\n", $$, $2, $4);
-		#endif
-	};
+	;
 
 factor : factor '*' term
 	{ 
 		$$ = $1 * $3; 
 		#ifdef DEBUG
-		printf("factor %d <- factor %d * term %d\n", $$, $1, $3);
+		printf("factor %d : factor %d * term %d\n", $$, $1, $3);
 		#endif
 	}
 	| factor '/' term
 	{ 
 		$$ = $1 / $3; 
 		#ifdef DEBUG
-		printf("factor %d <- factor %d / term %d\n", $$, $1, $3);
+		printf("factor %d : factor %d / term %d\n", $$, $1, $3);
 		#endif
 	}
-	| factor POW term
-	{
-		$$ = 1;
-		for (int i=0; i<$3; i++)
-		{
-			$$ *= $1; 
-		}
-		#ifdef DEBUG
-		printf("factor %d <- factor %d ** term %d\n", $$, $1, $3);
-		#endif
-	}
-	| term
+       | term
 	{
 		$$ = $1;
 		#ifdef DEBUG
-		printf("factor %d <- term %d\n", $$, $1);
+		printf("factor %d : term %d\n", $$, $1);
 		#endif
-	};
+	}
+	;
 
 term : NUMBER
 	{ 
 		$$ = $1;
 		#ifdef DEBUG
-		printf("term %d <- number %d\n", $$, $1);
+		printf("term %d : number %d\n", $$, $1);
 		#endif
 	}
-	| exp NUMBER
-		{ 
-		$$ = $2;
-		#ifdef DEBUG
-		printf("term %d <- exp number %d\n", $$, $2);
-		#endif
-	}
-	| '(' exp ')'
+     | '(' exp ')'
 	{
 		$$ = $2;
 		#ifdef DEBUG
-		printf("term %d <- (exp) %d\n", $$, $2);
+		printf("term %d : (exp) %d\n", $$, $2);
 		#endif
-	};
+	}
+	;
 
 %%
 
 struct nodeVar* assignVar(char *name, int val)
 {
 	struct nodeVar *var = findVar(name, val, head);
+	var->val = val;
 	return var;
 }
 
 struct nodeVar* findVar(char *name, int val, struct nodeVar *var)
 {
-	if(strcmp(name, var->varName) != 0)
+	if(strcmp(name, var->varName) == 0)
 	{
 		return var;
 	}
@@ -213,8 +196,25 @@ struct nodeVar* newVar(char* name, int val)
 	return var; 
 }
 
+void freeNodes()
+{
+	#ifdef DEBUG
+	printf("Freeing all variable Nodes\n");
+	#endif
+	struct nodeVar *node = head->next;
+	while(node != NULL)
+	{
+		struct nodeVar *tmp = node->next;
+		free(node);
+		node = tmp;
+	}
+
+	return;
+}
+
 int main() {
 	head = (struct nodeVar*) malloc(sizeof(struct nodeVar));
 	yyparse();
+	freeNodes();
 	return 0;
 }
